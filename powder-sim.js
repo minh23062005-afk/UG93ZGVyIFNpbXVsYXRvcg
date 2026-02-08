@@ -36,7 +36,7 @@ let glassHeatThreshold = 0.5;
 let smokeParticles = [];
 
 function setup() {
-  createCanvas(320, 450);
+  createCanvas(1000, 1000);
   document.oncontextmenu = () => false;
 
   cols = floor(width / cellSize);
@@ -555,4 +555,5 @@ if (cell.coolTimer >= lavaCoolTime) {
 }
 
 // LA-LA-LA LAVA CH-CH-CH-CH CHICKEN, STEVE'S LAVA CHICKEN YEAH IT'S TASTY AS HELL, OOO MAMACITA NOW YOU'RE RINGING THE BELL, CRISPY AND JUICY
+
 // NOW YOU'RE HAVING A SNACK, OOOO SUPER SPICY IT'S A LAVA ATTACK

@@ -14,7 +14,7 @@ let spawnTimer = 0;
 let impactThreshold = 5;
 let maxStackHeight = 20;
 
-let mode = "SAND";
+let mode = "SAND (Press E to switch modes)";
 let brushSize = 3;
 
 let wetSpreadRadius = 20;
@@ -54,7 +54,7 @@ function setup() {
 
 function keyPressed() {
   if (key === 'e' || key === 'E') {
-    if (mode === "SAND") mode = "WATER";
+    if (mode === "SAND" || mode === "SAND (Press E to switch modes)") mode = "WATER";
     else if (mode === "WATER") mode = "ROCK";
     else if (mode === "ROCK") mode = "LAVA";
     else if (mode === "LAVA") mode = "ERASER";
@@ -108,7 +108,7 @@ function draw() {
 
           if (grid[x][y] !== null) continue;
 
-          if (mode === "SAND") {
+          if (mode === "SAND" || mode === "SAND (Press E to switch modes)") {
             grid[x][y] = {
               type: "sand",
               r: random(210, 235),
@@ -555,5 +555,4 @@ if (cell.coolTimer >= lavaCoolTime) {
 }
 
 // LA-LA-LA LAVA CH-CH-CH-CH CHICKEN, STEVE'S LAVA CHICKEN YEAH IT'S TASTY AS HELL, OOO MAMACITA NOW YOU'RE RINGING THE BELL, CRISPY AND JUICY
-
 // NOW YOU'RE HAVING A SNACK, OOOO SUPER SPICY IT'S A LAVA ATTACK

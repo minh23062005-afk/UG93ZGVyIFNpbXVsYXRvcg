@@ -1,5 +1,4 @@
-// Powder Simulation BETA 1.3.0
-// I eat grass, grass 🦗🦗🦗
+// Powder Simulation BETA 1.3.5🔥❄️
 let cellSize = 4;
 let cols, rows;
 let grid = [];
@@ -16,6 +15,7 @@ let maxStackHeight = 20;
 
 let mode = "SAND (Press E to switch modes)";
 let brushSize = 3;
+let energyMode = "NONE";
 
 let wetSpreadRadius = 20;
 let wetSpreadRate = 0.02;
@@ -26,13 +26,18 @@ let glassDecayTime = 600;
 let steamRockSpreadLimit = 4;
 let glassSpreadRate = 0.015;
 let glassDecay = 0.003;
-let lavaCoolTime = 1600;
-let solidHeatGainFromLava = 0.12;
+let lavaCoolTime = 1200;
+let solidHeatGainFromLava = 0.06;
 let solidHeatDecay = 0.002;
 let solidHeatSpread = 0.12;
 let boilHeatThreshold = 0.7;
 let glassHeatThreshold = 0.5;
+let rockMeltThreshold = 0.95;
+let basaltMeltThreshold = 0.99;
+let coldSpreadRate = 0.45;
+let iceMeltTime = 18;
 let smokeParticles = [];
+let maxSmokeParticles = 800;
 let grassBurnTime = 60;
 let dustDissolveTime = 60;
 let dustHeatDissolveThreshold = 0.6;
@@ -80,7 +85,13 @@ function keyPressed() {
     else if (mode === "GRASS") mode = "DUST";
     else if (mode === "DUST") mode = "ROCK";
     else if (mode === "ROCK") mode = "ERASER";
+    else if (mode === "ERASER") mode = "NONE";
     else mode = "SAND";
+  }
+  if (key === 'p' || key === 'P') {
+    if (energyMode === "NONE") energyMode = "HEAT";
+    else if (energyMode === "HEAT") energyMode = "COLD";
+    else energyMode = "NONE";
   }
   if (key === ' ') {
     timeStopped = !timeStopped;
@@ -101,12 +112,58 @@ function countStackBelow(x, y) {
 }
 
 function spawnSmoke(x, y) {
+  if (smokeParticles.length >= maxSmokeParticles) {
+    smokeParticles.shift();
+  }
   smokeParticles.push({
     x: x * cellSize + cellSize / 2,
     y: y * cellSize + cellSize / 2,
     vy: random(0.2, 0.5),
     life: random(180, 300)
   });
+}
+
+function applyEnergyAt(x, y) {
+  let cell = grid[x][y];
+  if (!cell) return;
+
+  if (energyMode === "HEAT") {
+    if (cell.type !== "water" && cell.type !== "lava") {
+      cell.heat = min(1, (cell.heat || 0) + 0.08);
+    }
+    if (cell.type === "grass") {
+      cell.heatAge = (cell.heatAge || 0) + 1;
+      if (cell.heatAge % 6 === 0) spawnSmoke(x, y);
+      if (cell.heatAge >= 30) {
+        grid[x][y] = { type: "dust", r: random(110, 140), g: random(110, 140), b: random(110, 140), vy: 0 };
+      }
+      return;
+    }
+    if (cell.type === "dust") {
+      cell.heatAge = (cell.heatAge || 0) + 1;
+      if (cell.heatAge % 6 === 0) spawnSmoke(x, y);
+      if (cell.heatAge >= 30) {
+        grid[x][y] = { type: "lava", moveTimer: 0, meltTimer: 0, vy: 0, heatAge: 0, coolTimer: 0 };
+      }
+      return;
+    }
+
+    if (cell.type === "rock" || cell.type === "basalt" || cell.type === "glass" || cell.type === "ice") {
+      cell.heat = min(1, (cell.heat || 0) + 0.08);
+      return;
+    }
+    if (cell.type === "water") {
+      cell.heat = min(1, (cell.heat || 0) + 0.08);
+      return;
+    }
+  } else if (energyMode === "COLD") {
+    if (cell.type === "ice") return;
+    if (cell.heat === undefined) cell.heat = 0.5;
+    cell.heat = max(0, cell.heat - 0.08);
+    if (cell.heat <= 0.05) {
+      grid[x][y] = { type: "ice", r: random(140, 170), g: random(180, 210), b: random(220, 255), heat: 0, meltTimer: 0 };
+    }
+  }
 }
 
 function draw() {
@@ -128,6 +185,10 @@ function draw() {
 
           if (mode === "ERASER") {
             grid[x][y] = null;
+            continue;
+          }
+          if (mode === "NONE") {
+            applyEnergyAt(x, y);
             continue;
           }
 
@@ -420,6 +481,22 @@ function draw() {
       }
 
       else if (cell.type === "grass") {
+        let hotRockContact = false;
+        for (let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          let n = grid[x + dx]?.[y + dy];
+          if ((n?.type === "rock" || n?.type === "basalt") && (n.heat || 0) >= glassHeatThreshold) {
+            hotRockContact = true;
+            break;
+          }
+        }
+
+        if (hotRockContact) {
+          spawnSmoke(x, y);
+          grid[x][y] = { type: "dust", r: random(110, 140), g: random(110, 140), b: random(110, 140), vy: 0 };
+          processed[x][y] = true;
+          continue;
+        }
+
         if (cell.burning) {
           cell.burnTimer++;
           if (cell.burnTimer % 6 === 0) spawnSmoke(x, y);
@@ -435,10 +512,19 @@ function draw() {
       else if (cell.type === "lava") {
             let touchesWaterOrSand = false;
             let touchesOtherSolid = false;
+            let iceDestroyed = 0;
         for (let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
              let n = grid[x + dx]?.[y + dy];
             if (n?.type === "water" || n?.type === "sand") touchesWaterOrSand = true;
             else if (n?.type === "rock" || n?.type === "basalt" || n?.type === "glass") touchesOtherSolid = true;
+            if (n?.type === "ice") {
+              n.meltTimer = (n.meltTimer || 0) + 1;
+              if (n.meltTimer >= iceMeltTime) {
+                grid[x + dx][y + dy] = { type: "water", r: random(0, 30), g: random(80, 120), b: random(200, 255), heat: 0.3 };
+                processed[x + dx][y + dy] = true;
+                iceDestroyed++;
+              }
+            }
 
             if (n?.type === "grass") {
               n.burning = true;
@@ -454,6 +540,7 @@ function draw() {
 
 if (touchesWaterOrSand) cell.coolTimer = 0;
 else cell.coolTimer++;
+if (iceDestroyed > 0) cell.coolTimer += iceDestroyed * 6;
 
 if (cell.coolTimer >= lavaCoolTime) {
   grid[x][y] = { type: "basalt", r: random(30, 50), g: random(30, 50), b: random(35, 55), heat: 0.2 };
@@ -541,7 +628,7 @@ if (cell.coolTimer >= lavaCoolTime) {
       for (let y = 0; y < rows; y++) {
         let c = grid[x][y];
         if (!c) continue;
-        if (c.type === "rock" || c.type === "basalt" || c.type === "glass") {
+        if (c.type === "rock" || c.type === "basalt" || c.type === "glass" || c.type === "ice") {
           c.heat = c.heat || 0;
           let lavaAdj = 0;
           for (let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
@@ -560,6 +647,24 @@ if (cell.coolTimer >= lavaCoolTime) {
 
           c.heat = max(0, c.heat - solidHeatDecay);
 
+          if (c.type === "rock" && c.heat >= rockMeltThreshold) {
+            grid[x][y] = { type: "lava", moveTimer: 0, meltTimer: 0, vy: 0, heatAge: 0, coolTimer: 0 };
+            processed[x][y] = true;
+            continue;
+          }
+
+          if (c.type === "basalt" && c.heat >= basaltMeltThreshold) {
+            grid[x][y] = { type: "lava", moveTimer: 0, meltTimer: 0, vy: 0, heatAge: 0, coolTimer: 0 };
+            processed[x][y] = true;
+            continue;
+          }
+
+          if (c.type === "ice" && c.heat >= 0.5) {
+            grid[x][y] = { type: "water", r: random(0, 30), g: random(80, 120), b: random(200, 255), heat: c.heat };
+            processed[x][y] = true;
+            continue;
+          }
+
           if (c.heat >= boilHeatThreshold) {
             for (let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
               let nx = x + dx;
@@ -569,6 +674,47 @@ if (cell.coolTimer >= lavaCoolTime) {
                 processed[nx][ny] = true;
               }
             }
+          }
+        }
+      }
+    }
+
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
+        let c = grid[x][y];
+        if (!c) continue;
+        if (c.type === "water" || c.type === "lava") continue;
+        if (c.type === "rock" || c.type === "basalt" || c.type === "glass" || c.type === "ice") continue;
+        if (c.heat === undefined) continue;
+
+        c.heat = max(0, c.heat - solidHeatDecay);
+        if (c.heat >= rockMeltThreshold) {
+          grid[x][y] = { type: "lava", moveTimer: 0, meltTimer: 0, vy: 0, heatAge: 0, coolTimer: 0 };
+          processed[x][y] = true;
+        }
+      }
+    }
+
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
+        let c = grid[x][y];
+        if (!c || c.heat === undefined) continue;
+        if (c.type === "water" || c.type === "lava") continue;
+
+        for (let [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          let nx = x + dx;
+          let ny = y + dy;
+          let n = grid[nx]?.[ny];
+          if (!n || n.type === "water" || n.type === "lava") continue;
+
+          if (n.heat === undefined) {
+            if (c.heat <= 0.25) n.heat = 0.35;
+            continue;
+          }
+
+          if (c.heat < n.heat) {
+            let d = (n.heat - c.heat) * coldSpreadRate;
+            n.heat = max(0, n.heat - d);
           }
         }
       }
@@ -667,18 +813,18 @@ if (cell.coolTimer >= lavaCoolTime) {
       } else if (c.type === "water") {
         fill(c.r, c.g, c.b, 120);
       } else if (c.type === "rock") {
-        let h = c.heat || 0;
+        let h = min(1, (c.heat || 0) * 2.5);
         fill(
-          lerp(c.r, 255, h * 0.5),
-          lerp(c.g, 140, h * 0.4),
-          lerp(c.b, 80, h * 0.4)
+          lerp(c.r, 255, h),
+          lerp(c.g, 120, h),
+          lerp(c.b, 60, h)
         );
       } else if (c.type === "basalt") {
-        let h = c.heat || 0;
+        let h = min(1, (c.heat || 0) * 2.0);
         fill(
-          lerp(c.r, 90, h * 0.6),
-          lerp(c.g, 70, h * 0.5),
-          lerp(c.b, 80, h * 0.4)
+          lerp(c.r, 180, h),
+          lerp(c.g, 110, h),
+          lerp(c.b, 90, h)
         );
       } else if (c.type === "lava") {
         fill(255, random(80, 120), 0);
@@ -693,6 +839,8 @@ if (cell.coolTimer >= lavaCoolTime) {
       } else if (c.type === "glass") {
         let glassIntensity = c.glassiness || 0;
         fill(180 + glassIntensity * 30, 220, 255, 55 + glassIntensity * 45);
+      } else if (c.type === "ice") {
+        fill(c.r, c.g, c.b, 210);
       }
 
       rect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -722,6 +870,7 @@ if (cell.coolTimer >= lavaCoolTime) {
   noStroke();
   fill(0);
   text(`MODE: ${mode}`, 6, 12);
+  text(`ENERGY: ${energyMode}`, 6, 48);
   text(`SIZE: ${brushSize}`, 6, 24);
   text(`TIME: ${timeStopped ? "STOPPED" : "RUNNING"}`, 6, 36);
 
@@ -731,4 +880,4 @@ if (cell.coolTimer >= lavaCoolTime) {
   rect(0, 0, width, height);
 }
 
-// I'm touching the grass, I love the grass
+// That one game about fire boy and water girl

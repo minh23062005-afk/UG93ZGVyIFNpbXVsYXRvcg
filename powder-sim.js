@@ -398,7 +398,7 @@ function draw() {
           if (n?.type === "lava") {
             hotContact = true;
             sourceHeat = 1;
-            lavaContact = true;
+            lavaContact = lavaTemperature(n) >= lavaSuperHotTemp;
             break;
           }
           if (n && (n.type === "rock" || n.type === "basalt" || n.type === "glass")) {
@@ -801,7 +801,7 @@ if (touchesWaterOrSand) {
 
         if (!superHot && below?.type === "sand") {
           grid[x][y] = null;
-          grid[x][y + 1] = { type: "lava", moveTimer: 0, meltTimer: 0, vy: 0, heatAge: 0, coolTimer: 0 };
+          grid[x][y + 1] = { type: "glass", decayTimer: 0, glassiness: 1, heat: 1 };
           processed[x][y + 1] = true;
           processed[x][y] = true;
           cell.coolTimer = 0;
